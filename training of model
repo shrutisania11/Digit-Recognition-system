@@ -1,0 +1,92 @@
+import tensorflow as tf
+from tensorflow.keras.datasets import mnist
+import numpy as np
+import cv2
+
+# Load the MNIST dataset
+(x_train, y_train), (_, _) = mnist.load_data()
+
+# Normalize the input images
+x_train = x_train / 255.0
+
+# Define the model architecture
+model = tf.keras.Sequential([
+    tf.keras.layers.Flatten(input_shape=(28, 28)),  # Flatten the input images
+    tf.keras.layers.Dense(128, activation='relu'),  # Hidden layer with ReLU activation
+    tf.keras.layers.Dense(10, activation='softmax')  # Output layer with softmax activation
+])
+
+# Compile the model
+model.compile(optimizer='adam',
+              loss='sparse_categorical_crossentropy',
+              metrics=['accuracy'])
+
+# Train the model
+model.fit(x_train, y_train, epochs=5)
+
+# Save the trained model weights
+model.save_weights('mnist_model_weights.h5')
+
+# Function to preprocess the drawn image
+def preprocess_image(image):
+    # Convert to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Resize to match MNIST dataset
+    resized = cv2.resize(gray, (28, 28), interpolation=cv2.INTER_AREA)
+    # Invert the image (MNIST digits are white on black)
+    inverted = cv2.bitwise_not(resized)
+    # Normalize the image
+    normalized = inverted / 255.0
+    # Reshape to match model input shape
+    reshaped = np.reshape(normalized, (1, 28, 28))
+    return reshaped
+
+# Function to predict the drawn number
+def predict_number(image):
+    preprocessed_image = preprocess_image(image)
+    prediction = model.predict(preprocessed_image)
+    predicted_number = np.argmax(prediction)
+    return predicted_number
+
+# Function to draw a number and get prediction
+def draw_and_predict():
+    # Create a blank white canvas
+    canvas = np.ones((300, 300), dtype="uint8") * 255
+    # Initialize variables
+    drawing = False
+    last_point = None
+
+    # Mouse callback function
+    def draw_line(event, x, y, flags, param):
+        nonlocal drawing, last_point
+
+        if event == cv2.EVENT_LBUTTONDOWN:
+            drawing = True
+            last_point = (x, y)
+        elif event == cv2.EVENT_MOUSEMOVE:
+            if drawing:
+                cv2.line(canvas, last_point, (x, y), 0, 5)
+                last_point = (x, y)
+        elif event == cv2.EVENT_LBUTTONUP:
+            drawing = False
+
+    cv2.namedWindow("Draw a number")
+    cv2.setMouseCallback("Draw a number", draw_line)
+
+    while True:
+        cv2.imshow("Draw a number", canvas)
+        key = cv2.waitKey(1) & 0xFF
+
+        if key == ord("r"):  # Reset canvas
+            canvas[:] = 255
+        elif key == ord("p"):  # Predict number
+            predicted_number = predict_number(canvas)
+            print("Predicted Number:", predicted_number)
+        elif key == ord("q"):  # Quit
+            break
+
+    cv2.destroyAllWindows()
+
+# Main function
+if _name_ == "_main_":
+    draw_and_predict()
