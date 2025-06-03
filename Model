@@ -1,0 +1,98 @@
+import tensorflow as tf
+from tensorflow.keras.datasets import mnist
+import numpy as np
+import cv2
+import os
+
+MODEL_WEIGHTS = 'mnist_model_weights.h5'
+
+# Step 1: Train the model if not already trained
+def train_model():
+    (x_train, y_train), (_, _) = mnist.load_data()
+    x_train = x_train / 255.0
+
+    model = tf.keras.Sequential([
+        tf.keras.layers.Flatten(input_shape=(28, 28)),
+        tf.keras.layers.Dense(128, activation='relu'),
+        tf.keras.layers.Dense(10, activation='softmax')
+    ])
+    model.compile(optimizer='adam',
+                  loss='sparse_categorical_crossentropy',
+                  metrics=['accuracy'])
+
+    print("Training model on MNIST...")
+    model.fit(x_train, y_train, epochs=5)
+    model.save_weights(MODEL_WEIGHTS)
+    print("Model trained and saved.")
+    return model
+
+# Step 2: Load the model
+def load_model():
+    model = tf.keras.Sequential([
+        tf.keras.layers.Flatten(input_shape=(28, 28)),
+        tf.keras.layers.Dense(128, activation='relu'),
+        tf.keras.layers.Dense(10, activation='softmax')
+    ])
+    model.compile(optimizer='adam',
+                  loss='sparse_categorical_crossentropy',
+                  metrics=['accuracy'])
+    model.load_weights(MODEL_WEIGHTS)
+    return model
+
+# Step 3: Preprocess drawn image
+def preprocess(image):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    resized = cv2.resize(gray, (28, 28), interpolation=cv2.INTER_AREA)
+    inverted = cv2.bitwise_not(resized)
+    normalized = inverted / 255.0
+    reshaped = normalized.reshape(1, 28, 28)
+    return reshaped
+
+# Step 4: Drawing interface
+def draw_and_predict(model):
+    canvas = np.ones((300, 300), dtype="uint8") * 255
+    drawing = False
+    last_point = None
+
+    def draw(event, x, y, flags, param):
+        nonlocal drawing, last_point
+        if event == cv2.EVENT_LBUTTONDOWN:
+            drawing = True
+            last_point = (x, y)
+        elif event == cv2.EVENT_MOUSEMOVE and drawing:
+            cv2.line(canvas, last_point, (x, y), 0, 8)
+            last_point = (x, y)
+        elif event == cv2.EVENT_LBUTTONUP:
+            drawing = False
+
+    cv2.namedWindow("Draw a digit")
+    cv2.setMouseCallback("Draw a digit", draw)
+
+    print("\nINSTRUCTIONS:")
+    print("Draw a digit using your mouse.")
+    print("Press 'p' to predict, 'r' to reset, 'q' to quit.\n")
+
+    while True:
+        cv2.imshow("Draw a digit", canvas)
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('r'):
+            canvas[:] = 255
+        elif key == ord('p'):
+            color_canvas = cv2.cvtColor(canvas, cv2.COLOR_GRAY2BGR)
+            input_image = preprocess(color_canvas)
+            prediction = model.predict(input_image, verbose=0)
+            predicted_digit = np.argmax(prediction)
+            print("Predicted Digit:", predicted_digit)
+        elif key == ord('q'):
+            break
+
+    cv2.destroyAllWindows()
+
+# Main controller
+if _name_ == "_main_":
+    if not os.path.exists(MODEL_WEIGHTS):
+        model = train_model()
+    else:
+        model = load_model()
+
+    draw_and_predict(model)
